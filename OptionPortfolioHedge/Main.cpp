@@ -180,26 +180,34 @@ size_t which(float* f, size_t n, float x) {
 	return i;
 }
 
+//struct HedingErrorParameters{
+//	float T
+//};
+//
+//float CalculaHedgingError(){
+//
+//}
+
 int main(int argc, char *argv[]){
 	double t1 = omp_get_wtime();
 
-	float T = 1.0;
-	size_t M = 100000;
-	size_t n = 50;
-
-	float mu = 0.01;
-	float S0 = 100;
-	float r = 0;
-	float sigma = 0.09;
-	optionType opcao = otEuroCall;
-	float K = 100;
-	size_t l = 22;
+	float T = 1.0; // Vencimento da opção
+	size_t M = 100000; // Número de simulações
+	size_t n = 50; // Quantidade de intervalos gerados no tempo T para realizar a discretização
+	float mu = 0.01;  // taxa média de retorno
+	float S0 = 100; // Preço inicial da ação 
+	float r = 0; // taxa de juros livre de risco
+	float sigma = 0.09; // volatilidade BS
+	optionType opcao = otEuroCall; // tipo de opção
+	float K = 100; // strike da opção
+	size_t l = 22; // quantidade de rebalanceamentos de delta hedging que será realizado no portfolio.
 
 	float *erro = (float*)calloc(M, sizeof(float));
 	float *Tempos = seq(0.0, T, n);
 	size_t *tempoDeHedging = (size_t*)calloc(l, sizeof(size_t));
 	float preco_opcao = preco_bs(T, 0.0, S0, K, r, sigma, opcao);
 
+	// Gera um vetor para sabermos os momentos em Tempos que serão feitos os delta hedgings.
 	for (size_t j = 0; j < l; j++) {
 		float tempo = (float)j / (float)l;
 		tempoDeHedging[j] = which(Tempos, n, tempo);
@@ -214,6 +222,7 @@ int main(int argc, char *argv[]){
 		float Pay_descontado_real = 0;
 		float integral = 0, valor_portfolio_final = 0;
 		
+		// Gera uma trajetória do preço da ação que será utilizada como a trajetória real para cálculo do resultado da carteira.
 		evolucao_real_bs(T, S0, r, sigma, n, mu, Tempos, S);
 		Pay_descontado_real = payoff_descontado(T, r, S[n - 1], K, opcao);
 
