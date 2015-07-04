@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <omp.h>
+#include <time.h>
 
 #ifndef Pi 
 #define Pi 3.141592653589793238462643 
@@ -25,7 +26,11 @@ float rnorm() {
 
 float* B = NULL;
 
+// Método que retorna um vetor com um movimento browniano.
 float* MB(size_t n, float T) {
+
+	// Modificar o seed do gerador aleatório
+	(srand((unsigned)time(NULL)));
 
 	float h = T / n;
 	float sh = sqrt(h);
@@ -33,6 +38,7 @@ float* MB(size_t n, float T) {
 
 	if (B == NULL)
 		B = (float *)calloc(n + 1, sizeof(float));
+
 	size_t i;
 	for (i = 0; i < n; i++)
 	{
@@ -61,6 +67,7 @@ float pnorm(float x) {
 	return w;
 }
 
+// Retorna um vetor com a discretização do tempo
 float* seq(float a, float b, float n) {
 
 	float *x = (float*)calloc(n, sizeof(float));
@@ -75,6 +82,7 @@ float* seq(float a, float b, float n) {
 	return x;
 }
 
+// Calcula os valores de d1 e d2 da fórmula de BS
 float* bs_d(float T, float t, float S0, float K, float r, float sigma) {
 
 	float sigmaSqrtT = sigma * sqrt(T - t);
@@ -85,6 +93,7 @@ float* bs_d(float T, float t, float S0, float K, float r, float sigma) {
 	return d;
 }
 
+// Calcula o preço de uma opção
 float preco_bs(float T, float t, float S0, float K, float r, float sigma, optionType opcao) {
 
 	float *d = bs_d(T, t, S0, K, r, sigma);
@@ -101,24 +110,21 @@ float preco_bs(float T, float t, float S0, float K, float r, float sigma, option
 		return 0.0;
 		break;
 	}
-
 }
 
-float* evolucao_real_bs(float T, float S0, float r, float sigma, size_t n, float mu, float* Tempos) {
+// Gera uma simulação da evolução do preço do ativo, já descontado na medida física.
+void evolucao_real_bs(float T, float S0, float r, float sigma, size_t n, float mu, float *Tempos, float *S) {
 
 	float *W;
-	float *S = (float*)calloc(n, sizeof(float));
-
+	
 	W = MB(n, T);
 	for (size_t i = 0; i < n; i++)
 	{
-		S[i] = S0 * exp((mu - r - sigma*sigma / 2) * Tempos[i] + sigma * W[i]); // checar esta formula
-
+		S[i] = S0 * exp((mu - r - sigma*sigma / 2) * Tempos[i] + sigma * W[i]);
 	}
-
-	return(S);
 }
 
+// Cálculo da quantidade do ativo objeto da opção para realizar o delta hedging.
 float hedging_bs(float T, float t, float S0, float K, float r, float sigma, optionType opcao) {
 
 	float *d = bs_d(T, t, S0, K, r, sigma);
@@ -138,6 +144,7 @@ float hedging_bs(float T, float t, float S0, float K, float r, float sigma, opti
 
 }
 
+// Cálculo do payoff da opção trazido a valor presente.
 float payoff_descontado(float T, float r, float ST, float K, optionType opcao) {
 
 	float payoff;
@@ -161,6 +168,7 @@ float payoff_descontado(float T, float r, float ST, float K, optionType opcao) {
 
 }
 
+// Econtra o maior indice do vetor f que possui os valores menores que x.
 size_t which(float* f, size_t n, float x) {
 
 	size_t i = 0;
@@ -172,57 +180,11 @@ size_t which(float* f, size_t n, float x) {
 	return i;
 }
 
-double f(double x) {
-	int i;
-	double sum = 0.0;
-	for (i = 0; i < 1000; i++) {
-		sum += 1.0 / (i + 1.0);
-	}
-	return 1.0 / (x + 1.0);
-}
-
-double fint(double x) {
-	return log(x + 1.0);
-}
-
-//int main(int argc, char *argv[]){
-//	printf("Hello World!\n");
-//
-//	double a = atof(argv[1]);
-//	double b = atof(argv[2]);
-//	int numintervalos = atoi(argv[3]);
-//	int numthreads = atoi(argv[4]);
-//	omp_set_num_threads(numthreads);
-//
-//	double integral = 0.0;
-//	double width = (b - a) / numintervalos;
-//#pragma omp parallel
-//	{
-//		int ID = omp_get_thread_num();
-//		int i;
-//		for (i = ID; i < numintervalos; i += numthreads) {
-//			double begin = a + i * width;
-//			double end = begin + width;
-//			double middle = (begin + end) / 2.0;
-//			double fx = f(middle);
-//			double area = fx * width;
-//#pragma omp atomic
-//			integral += area;
-//		}
-//	}
-//
-//	printf("Integral de f(x) de %lf ate %lf eh: %0.15lf\n", a, b, integral);
-//	printf("          fint(%lf) - fint(%lf) eh: %0.15lf\n", b, a, fint(b) - fint(a));
-//
-//	printf("Press [ENTER] to exit.");
-//	int c = fgetc(stdin);
-//}
-
 int main(int argc, char *argv[]){
 	double t1 = omp_get_wtime();
 
 	float T = 1.0;
-	size_t M = 1000;
+	size_t M = 100000;
 	size_t n = 50;
 
 	float mu = 0.01;
@@ -235,44 +197,54 @@ int main(int argc, char *argv[]){
 
 	float *erro = (float*)calloc(M, sizeof(float));
 	float *Tempos = seq(0.0, T, n);
+	size_t *tempoDeHedging = (size_t*)calloc(l, sizeof(size_t));
 	float preco_opcao = preco_bs(T, 0.0, S0, K, r, sigma, opcao);
 
-	size_t i, j, k, g;
-	float *S;
-	float *S_int = (float*)calloc(l + 1, sizeof(float));
-	float *hedging = (float*)calloc(l, sizeof(float));
-	float *tempo = (float*)calloc(l, sizeof(float));
-	float Pay_descontado_real;
-	float integral, valor_portfolio_final, erroM = 0.0;
-
-	for (i = 0; i < M; i++)
-	{
-		S = evolucao_real_bs(T, S0, r, sigma, n, mu, Tempos);
-		Pay_descontado_real = payoff_descontado(T, r, S[n - 1], K, opcao);
-
-		for (j = 0; j<l; j++) {
-			tempo[j] = (float)j / (float)l;
-			g = which(Tempos, n, tempo[j]);
-			S_int[j] = S[g];
-			hedging[j] = hedging_bs(T, tempo[j], S_int[j], K, r, sigma, opcao);
-		}
-		S_int[l] = S[n - 1];
-
-		integral = 0;
-		for (k = 0; k<l; k++) {
-			integral += hedging[k] * (S_int[k + 1] - S_int[k]);
-		}
-		valor_portfolio_final = preco_opcao + integral;
-		erro[i] = Pay_descontado_real - valor_portfolio_final;
-		erroM += erro[i];
+	for (size_t j = 0; j < l; j++) {
+		float tempo = (float)j / (float)l;
+		tempoDeHedging[j] = which(Tempos, n, tempo);
 	}
 
-	float hedging_error = erroM / M;
+#pragma omp parallel for
+	for (int i = 0; i < M; i++)
+	{
+		float *S_int = (float*)calloc(l + 1, sizeof(float));
+		float *S = (float*)calloc(n, sizeof(float));
+		float *hedging = (float*)calloc(l, sizeof(float));
+		float Pay_descontado_real = 0;
+		float integral = 0, valor_portfolio_final = 0;
+		
+		evolucao_real_bs(T, S0, r, sigma, n, mu, Tempos, S);
+		Pay_descontado_real = payoff_descontado(T, r, S[n - 1], K, opcao);
+
+		integral = 0;
+		S_int[0] = S[tempoDeHedging[0]];
+		hedging[0] = hedging_bs(T, Tempos[tempoDeHedging[0]], S_int[0], K, r, sigma, opcao);
+		for (size_t j = 1; j < l; j++) {
+			S_int[j] = S[tempoDeHedging[j]];
+			hedging[j] = hedging_bs(T, Tempos[tempoDeHedging[j]], S_int[j], K, r, sigma, opcao);
+			integral += hedging[j - 1] * (S_int[j] - S_int[j - 1]);
+		}
+		S_int[l] = S[n - 1];
+		integral += hedging[l - 1] * (S_int[l] - S_int[l - 1]);
+
+		valor_portfolio_final = preco_opcao + integral;
+		erro[i] = Pay_descontado_real - valor_portfolio_final;
+
+		free(S);
+		free(hedging);
+		free(S_int);
+	}
+
+	float hedging_error = 0;
+	for (size_t i = 0; i < M; i++)
+		hedging_error += (erro[i] / M);
 
 	printf("%f\n", hedging_error);
 
 	free(Tempos);
 	free(erro);
+	free(tempoDeHedging);
 
 	double t2 = omp_get_wtime();
 	printf("Time elapsed: %f\n", t2 - t1);
